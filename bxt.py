@@ -42,10 +42,11 @@ def update_dns(zone_id, hostname, action='UPSERT', ip=None, synchronous=False):
     )
     if synchronous:
         cid = response['ChangeInfo']['Id']
+        time.sleep(40)
         response = client.get_change(Id=cid)
         while response['ChangeInfo']['Status'] == 'PENDING':
-            response = client.get_change(Id=cid)
             time.sleep(5)
+            response = client.get_change(Id=cid)
 
 
 def cli():
