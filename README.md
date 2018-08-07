@@ -1,5 +1,16 @@
 Stuff I cannot find in aws-cli that boto3 can do.
 
+# Install
+
+You would probably do something like:
+
+```
+virtualenv -p python3 bxt
+. bxt/bin/activate
+pip install https://github.com/jeromerobert/bxt/archive/master.zip
+```
+
+# Usage
 
 ```
 usage: bxt updatedns [-h] [-a ACTION] [--ip IP] [-s] zoneid hostname
