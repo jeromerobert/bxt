@@ -13,7 +13,7 @@ def _get_public_ipv4():
     return ipr.read().decode('utf-8')
 
 
-def update_dns(zone_id, hostname, action='UPSERT', ip=None, synchronous=False):
+def update_dns(zone_id, hostnames, action='UPSERT', ip=None, synchronous=False):
     """
     https://docs.aws.amazon.com/Route53/latest/APIReference/API_ChangeResourceRecordSets.html
     :param zone_id:
@@ -26,27 +26,33 @@ def update_dns(zone_id, hostname, action='UPSERT', ip=None, synchronous=False):
     client = aws.client('route53')
     if ip is None:
         ip = _get_public_ipv4()
-    response = client.change_resource_record_sets(
-        HostedZoneId=zone_id,
-        ChangeBatch={
-            'Changes': [{
-                'Action': action,
-                'ResourceRecordSet': {
-                    'Name': hostname,
-                    'Type': 'A',
-                    'TTL': 60,
-                    'ResourceRecords': [{'Value': ip}],
-                },
-            }],
-        },
-    )
+    cids=[]
+    for hostname in hostnames:
+        response = client.change_resource_record_sets(
+            HostedZoneId=zone_id,
+            ChangeBatch={
+                'Changes': [{
+                    'Action': action,
+                    'ResourceRecordSet': {
+                        'Name': hostname,
+                        'Type': 'A',
+                        'TTL': 60,
+                        'ResourceRecords': [{'Value': ip}],
+                    },
+                }],
+            },
+        )
+        cids.append(response['ChangeInfo']['Id'])
     if synchronous:
-        cid = response['ChangeInfo']['Id']
-        time.sleep(40)
-        response = client.get_change(Id=cid)
-        while response['ChangeInfo']['Status'] == 'PENDING':
+        time.sleep(30)
+        while len(cids) > 0:
+            newcids=[]
+            for cid in cids:
+                response = client.get_change(Id=cid)
+                if response['ChangeInfo']['Status'] == 'PENDING':
+                    newcids.append(cid)
+            cids=newcids
             time.sleep(5)
-            response = client.get_change(Id=cid)
 
 
 def cli():
@@ -55,7 +61,7 @@ def cli():
     dns_parser = subparsers.add_parser('updatedns',
                                        description='Update a A DNS record in Route53 possibly synchronously.')
     dns_parser.add_argument('zoneid', help='A Route53 Zone ID')
-    dns_parser.add_argument('hostname', help='The hostname to set')
+    dns_parser.add_argument('hostname', help='The names to set', nargs='+')
     dns_parser.add_argument('-a', '--action', help='<CREATE|DELETE|UPSERT>. Default is UPSERT', default='UPSERT')
     dns_parser.add_argument('--ip', help='The IP to set. The default is to use the public IP of the current instance.',
                             default=None)
