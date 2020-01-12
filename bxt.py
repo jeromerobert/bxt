@@ -183,6 +183,9 @@ def parse_cli():
     subparsers.add_parser(
         'blkdev', help='List unmounted/unpartitionned block devices.')
     subparsers.add_parser('poweroff', help='Power off the cluster.')
+    rmlog_parser = subparsers.add_parser('rmlog', description='Remove all streams from a Cloudwatch log group.')
+    rmlog_parser.add_argument('--region', help='The AWS region.')
+    rmlog_parser.add_argument('loggroup', help='The log group name.')
     dns_parser = subparsers.add_parser('updatedns',
                                        help='Update a A DNS record in Route53 possibly synchronously.')
     dns_parser.add_argument('zoneid', help='A Route53 Zone ID')
@@ -267,12 +270,27 @@ def _blkdev():
     print(len(blockdevices), ' '.join(blockdevices))
 
 
+def rmlog(loggroup, region=None):
+    client = aws.client('logs', region)
+    while True:
+        response = client.describe_log_streams(logGroupName=loggroup)
+        toremove = [x['logStreamName'] for x in response['logStreams']]
+        if len(toremove) == 0:
+            break
+        else:
+            print("Deleting {} streams".format(len(toremove)))
+            for n in toremove:
+                client.delete_log_stream(logGroupName=loggroup, logStreamName=n)
+
+
 def main():
     args, parser = parse_cli()
     cmd = args.command
     if cmd == 'updatedns':
         update_dns(args.zoneid, args.hostname,
                    args.action, args.ip, args.synchronous)
+    elif args.command == 'rmlog':
+        rmlog(args.loggroup, region=args.region)
     elif cmd == 'sub':
         _sub(args.job_script, args.job_name, args.env, args.config)
     elif cmd == 'blkdev':
