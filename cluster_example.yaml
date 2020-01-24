@@ -1,0 +1,54 @@
+# The S3 bucket folder with input data (will be sync with localdata)
+s3-data: s3://foobar/mpicluster
+# Job output folder
+s3-output: s3://foobar/results
+# The local folder to sync with S3 before each submission
+localdata: data
+# https://docs.aws.amazon.com/general/latest/gr/rande.html#ec2_region
+region: eu-west-1
+# Init config of each node/instances (see https://cloudinit.readthedocs.io)
+cloud-init: cloud-init.yaml
+# For comms between clusters nodes only. Do no use your personal ssh key.
+ssh-key: id_rsa
+# https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_RunInstances.html
+instance-config:
+  # Debian Buster
+  ImageId: ami-0e9cc061cd3259f22
+  # A 24 cores instance with disks (see https://www.ec2instances.info)
+  InstanceType: c5.18xlarge
+  # Number of instances in the cluster
+  MaxCount: 4
+  MinCount: 4
+  # Authorization for S3
+  IamInstanceProfile: { Arn: 'arn:aws:iam::xxxxxxx:instance-profile/xxxxxxxx' }
+  # Spot instances are much cheaper
+  InstanceMarketOptions: { MarketType: spot }
+  # ssh key
+  KeyName: john.doe
+  # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/placement-groups.html#placement-groups-cluster
+  Placement: { GroupName: mpibench }
+  # Placeholder for Tags
+  TagSpecifications:
+  - ResourceType: instance
+    Tags:
+  # Disk configuration
+  BlockDeviceMappings:
+  - DeviceName: /dev/xvdba
+  # Example: 3 x 50 GiB of fast SSD (io1) in RAID0
+    Ebs:
+      DeleteOnTermination: true
+      Iops: 2000
+      VolumeSize: 100
+      VolumeType: io1
+  - DeviceName: /dev/xvdbb
+    Ebs:
+      DeleteOnTermination: true
+      Iops: 2000
+      VolumeSize: 100
+      VolumeType: io1
+  - DeviceName: /dev/xvdbc
+    Ebs:
+      DeleteOnTermination: true
+      Iops: 2000
+      VolumeSize: 100
+      VolumeType: io1

@@ -1,0 +1,84 @@
+#cloud-config
+
+# Cloud init file to setup a MPI cluster
+
+output:
+  # keep cloud_init logs
+  all: '| tee -a /var/log/cloud-init-output.log'
+
+# do not install recommended packages
+apt_get_command:
+  - apt-get
+  - '--option=Dpkg::Options::=--force-confold'
+  - '--option=Dpkg::options::=--force-unsafe-io'
+  - '--assume-yes'
+  - '--quiet'
+  - '--no-install-recommends'
+
+packages:
+  - python3-boto3
+  - lzop
+  # file systems
+  - mdadm
+  - nfs-kernel-server
+  # profiling tools
+  - linux-perf
+  - iotop
+  - iftop
+
+# @string@ will be replaced by submission python script
+write_files:
+  # this script
+  - path: /usr/local/bin/bxt
+    permissions: 0755
+    content: '@bxt@'
+  # Add the private ssh key used within the cluster. This is available to all
+  # users of each nodes of the cluster by as there is only a single user this
+  # is not an issue
+  - path: /var/tmp/id_rsa
+    content: '@id_rsa@'
+  - path: /etc/profile.d/cluster.sh
+    permissions: 0644
+    content: '@environ@'
+  # The job script
+  - path: /var/tmp/job
+    permissions: 0755
+    content: '@job@'
+  # configuration ran as root
+  - path: /usr/local/bin/configure-cluster
+    permissions: 0755
+    content: |
+      #! /bin/bash -ex
+
+      # Create /work and /scratch
+      # --force is needed if there is only one drive
+      mdadm --create /dev/md0 --level=stripe --force --raid-devices=$(bxt blkdev)
+      mkfs.ext4 -m 0 -E nodiscard,lazy_itable_init /dev/md0
+      mkdir /scratch /work
+      mount /dev/md0 /scratch
+
+      # Configure ssh
+      h=/home/admin/.ssh/
+      echo -e 'host *.compute.internal\nStrictHostKeyChecking no' >> $h/config
+      mv /var/tmp/id_rsa $h && chmod 600 $h/*
+      ssh-keygen -y -f $h/id_rsa > $h/id_rsa.pub
+      cat $h/id_rsa.pub >> $h/authorized_keys
+      chown -R admin:admin /scratch /work /home/admin
+
+      # Export the master /work and mount it on other nodes
+      bxt nfs --user admin /work
+  - path: /usr/local/bin/run-job
+    permissions: 0755
+    content: |
+      #! /bin/sh -x
+      if [ $(bxt rank) -eq 0 ]; then
+        cd /work
+        bash -ex /var/tmp/job
+        # power off the cluster after the job execution and avoid costly
+        # zombie. This may be commented for debuggin purpose.
+        bxt poweroff
+      fi
+
+runcmd:
+  - configure-cluster
+  - su admin -c run-job
