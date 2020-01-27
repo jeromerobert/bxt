@@ -180,9 +180,13 @@ def parse_cli():
     nfs_parser.add_argument(
         '--user', help='User account to use to ssh other nodes (must be mount sudoer).', default="root")
     nfs_parser.add_argument('folder', help='The folder to export/mount.')
+    nfs_parser.add_argument('--no-sync', help='Disable SSH synchronization/barrier before mount', action='store_false')
     subparsers.add_parser(
         'blkdev', help='List unmounted/unpartitionned block devices.')
     subparsers.add_parser('poweroff', help='Power off the cluster.')
+    barrier_parser = subparsers.add_parser('barrier', help='Synchronize all nodes using ssh')
+    barrier_parser.add_argument('--user', help='User account to use to ssh other nodes.', default="root")
+    barrier_parser.add_argument('--cmd', help='Command to execute on each nodes (must return true for success).', default="true")
     rmlog_parser = subparsers.add_parser('rmlog', description='Remove all streams from a Cloudwatch log group.')
     rmlog_parser.add_argument('--region', help='The AWS region.')
     rmlog_parser.add_argument('loggroup', help='The log group name.')
@@ -200,7 +204,7 @@ def parse_cli():
     return parser.parse_args(), parser
 
 
-def nfs_exports(rank, names, folder, user):
+def nfs_exports(rank, names, folder, user, sync_cmd = "/sbin/mount.nfs4 -V"):
     if rank != 0:
         return
     master = names[0]
@@ -211,7 +215,8 @@ def nfs_exports(rank, names, folder, user):
             f.write(' ' + on + '(rw,async,no_subtree_check)')
         f.write('\n')
     subprocess.check_call(['exportfs', '-ra'])
-    _sync(others, user)
+    if sync_cmd:
+        _sync(rank, names, user, sync_cmd)
     for h in others:
         cmd = ['su', user, '-c',
                'ssh {} sudo mount {}:{} {}'.format(h, master, folder, folder)]
@@ -228,12 +233,14 @@ def _poweroff(rank, names):
     subprocess.check_call(['sudo', 'poweroff'])
 
 
-def _sync(names, user):
+def _sync(rank, names, user, remote_cmd):
     """
     Test each nodes of the cluster with ssh mount.nfs4 and wait until
     each actually return true
     """
     TIMEOUT_MINUTES = 5
+    if rank != 0:
+        return
     names_to_keep = list(names)
     start = time.time()
     processes = []
@@ -242,7 +249,7 @@ def _sync(names, user):
             raise TimeoutError(
                 "Some cluster nodes still not up after {} minutes.".format(TIMEOUT_MINUTES))
         for name in names_to_keep:
-            cmd = ['su', user, '-c', 'ssh {} /sbin/mount.nfs4 -V'.format(name)]
+            cmd = ['su', user, '-c', 'ssh {} "{}"'.format(name, remote_cmd)]
             print(' '.join(cmd))
             processes.append((name, subprocess.Popen(cmd),))
         names_to_keep = []
@@ -305,6 +312,8 @@ def main():
         _poweroff(_rank(), _hosts())
     elif cmd == 'hosts':
         print(','.join(_hosts()))
+    elif cmd == 'barrier':
+        _sync(_rank(), _hosts(), args.user, args.cmd)
     else:
         parser.print_help()
 
