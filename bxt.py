@@ -23,9 +23,9 @@ def _load_config(filename):
     if not os.path.isfile(filename):
         filename = os.path.join(os.path.expanduser('~'), '.cluster.yaml')
     with open(filename) as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
     with open(config['cloud-init']) as f:
-        config['cloud-init'] = yaml.load(f)
+        config['cloud-init'] = yaml.load(f, Loader=yaml.FullLoader)
     return config
 
 
