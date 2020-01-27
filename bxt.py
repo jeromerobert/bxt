@@ -59,6 +59,16 @@ def _s3region(url):
     return s3.meta.client.get_bucket_location(Bucket=bucket)["LocationConstraint"]
 
 
+def _print_ip(client, run_instance_resp):
+    ids = [ x['InstanceId'] for x in run_instance_resp['Instances'] ]
+    ips = []
+    while len(ips) != len(ids):
+        r = client.describe_instances(InstanceIds=ids)
+        ips = [x['PrivateIpAddress'] for x in r['Reservations'][0]['Instances'] if x['PrivateIpAddress']]
+    for i, ip in enumerate(ips):
+        print(i, ip)
+
+
 def _sub(job_script, job_name, environ, configfile):
     # function level import to make yaml optional
     import yaml
@@ -80,8 +90,7 @@ def _sub(job_script, job_name, environ, configfile):
     instance_config['TagSpecifications'][0]['Tags'] = [
         {'Key': 'JobName', 'Value': job_name}
     ]
-    r = client.run_instances(**instance_config)
-    print(r)
+    _print_ip(client, client.run_instances(**instance_config))
 
 
 def _getmeta(url):
