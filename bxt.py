@@ -238,7 +238,7 @@ def _poweroff(rank, names):
         return
     others = names[1:]
     for h in others:
-        subprocess.check_call(['ssh', h, 'sudo', 'poweroff'])
+        subprocess.call(['ssh', h, 'sudo', 'poweroff'])
     subprocess.check_call(['sudo', 'poweroff'])
 
 
