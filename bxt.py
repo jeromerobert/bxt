@@ -15,6 +15,26 @@ import urllib.request
 import urllib.parse
 
 
+def _cpu_info():
+    numproc = 0
+    numcore = 1
+    numthread = 1
+    with open("/proc/cpuinfo") as f:
+        for line in f:
+            line = line.split(":")
+            if len(line) == 2:
+                kw = line[0].strip()
+                if kw == "physical id":
+                    numproc = max(numproc, int(line[1]))
+                elif kw == "cpu cores":
+                    numcore = int(line[1])
+                elif kw == "siblings":
+                    numthread = int(line[1])
+    numproc += 1
+    numthread //= numcore
+    return numproc, numcore, numthread
+
+
 def _load_config(filename):
     # function level import to make yaml optional
     import yaml
@@ -192,8 +212,20 @@ def parse_cli():
                           help='Print the number of nodes in the cluster.')
     subparsers.add_parser('rank',
                           help='Print the rank of this node in the cluster.')
-    subparsers.add_parser('hosts',
-                          help='Print the comma separated list of nodes in this cluster.')
+    hosts_parser = subparsers.add_parser('hosts', help='Print the comma separated list of nodes in this cluster.')
+    hosts_group = hosts_parser.add_mutually_exclusive_group()
+    hosts_group.add_argument(
+        "-c",
+        "--core",
+        help="Print host1:<numcore>,...,hostn:<numcore>.",
+        action="store_true",
+    )
+    hosts_group.add_argument(
+        "-t",
+        "--thread",
+        help="Print host1:<numthreads>,...,hostn:<numthreads>.",
+        action="store_true",
+    )
     nfs_parser = subparsers.add_parser('nfs',
                                        help='Export NFS from the master node and mount on other nodes.')
     nfs_parser.add_argument(
@@ -297,7 +329,7 @@ def _blkdev():
 
 
 def rmlog(loggroup, region=None):
-    client = aws.client('logs', region)
+    client = boto3.client('logs', region)
     while True:
         response = client.describe_log_streams(logGroupName=loggroup)
         toremove = [x['logStreamName'] for x in response['logStreams']]
@@ -330,7 +362,12 @@ def main():
     elif cmd == 'poweroff':
         _poweroff(_rank(), _hosts())
     elif cmd == 'hosts':
-        print(','.join(_hosts()))
+        suffix = ""
+        if args.core or args.thread:
+            p, c, t = _cpu_info()
+            v = p * (c if args.core else c * t)
+            suffix = ":" + str(v)
+        print(",".join([h + suffix for h in _hosts()]))
     elif cmd == 'barrier':
         _sync(_rank(), _hosts(), args.user, args.cmd)
     else:
