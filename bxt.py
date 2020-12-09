@@ -87,9 +87,19 @@ def _sub(job_script, job_name, environ, configfile):
     instance_config = conf['instance-config']
     instance_config['UserData'] = _gzip('#cloud-config\n' +
         yaml.dump(conf['cloud-init']))
-    instance_config['TagSpecifications'][0]['Tags'] = [
-        {'Key': 'JobName', 'Value': job_name}
-    ]
+    # Add the JobName tag without removing other tags
+    if 'TagSpecifications' not in instance_config:
+        instance_config['TagSpecifications'] = []
+    instts = None
+    for ts in instance_config['TagSpecifications']:
+        if 'ResourceType' in ts and ts['ResourceType'] == 'instance':
+            instts = ts
+    if instts is None:
+        instts = { 'ResourceType': 'instance' }
+        instance_config['TagSpecifications'].append(instts)
+    if 'Tags' not in instts:
+        instts['Tags'] = []
+    instts['Tags'].append({'Key': 'JobName', 'Value': job_name})
     _print_ip(client, client.run_instances(**instance_config))
 
 
