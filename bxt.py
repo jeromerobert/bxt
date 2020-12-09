@@ -38,7 +38,7 @@ def _format_cloud_init(config, job_script, environ):
     for wf in config['cloud-init']['write_files']:
         if wf['content'] == '@bxt@':
             wf['content'] = _readfile(__file__)
-        elif wf['content'] == '@id_rsa@':
+        elif wf['content'] == '@id_rsa@' or wf['content'] == '@id_ed25519@':
             wf['content'] = _readfile(config['ssh-key'])
         elif wf['content'] == '@environ@':
             wf['content'] = '\n'.join(environ)
